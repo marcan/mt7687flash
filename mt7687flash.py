@@ -36,6 +36,7 @@ class MtkFlasher(object):
         "ss": 3000000,
     }
     MAGIC = 0x00052001
+    SECRET_MAGIC = 0x00052002
 
     def __init__(self, port, speed, binpath=None, debug=False):
         self.speed = speed
@@ -85,20 +86,20 @@ class MtkFlasher(object):
         print("Sending ATED (%s)..." % fname)
         self.xm_send(open(os.path.join(self.binpath, fname), "rb"))
 
-    def command(self, cmd, args=b""):
+    def command(self, cmd, args=b"", magic=MAGIC):
         self.tag += 1
         self.ser.timeout = 5
         self.ser.write_timeout = 5
 
         payload = struct.pack(">H", cmd) + args
-        data = struct.pack(">IHH", 0x00052001,
+        data = struct.pack(">IHH", magic,
                            len(payload) + 2, self.tag) + payload
         crc = self.xm.calc_crc(data)
         self.ser.write(data + struct.pack(">H", crc))
 
         reply = self.ser.read(8)
-        magic, reply_len, tag = struct.unpack(">IHH", reply)
-        assert magic == (self.MAGIC | 0x80000000)
+        reply_magic, reply_len, tag = struct.unpack(">IHH", reply)
+        assert reply_magic == (magic | 0x80000000)
         assert tag == self.tag
         reply += self.ser.read(reply_len)
         assert len(reply) == reply_len + 8
@@ -172,6 +173,19 @@ class MtkFlasher(object):
         self.xm_send(fd, "  Writing")
         self.download_end()
 
+    def read_efuse(self, off, length):
+        assert (off & 0xf == 0)
+        assert (length & 0xf == 0)
+        self.log("  cmd: read_efuse")
+        reply = self.command(0x04, struct.pack(">II", off, length),
+                             self.SECRET_MAGIC)
+        self.log("    returned:", reply.encode("hex"))
+        return reply[4:]
+
+    def get_mac(self):
+        fuseblock = self.read_efuse(0, 0x10)
+        return ":".join("%02x" % ord(c) for c in fuseblock[4:10])
+
 if __name__ == "__main__":
     def parse_write(s):
         off, f = s.split(":", 1)
@@ -191,6 +205,8 @@ if __name__ == "__main__":
                         help="wipe the entire flash memory first")
     parser.add_argument("-w", "--write", metavar="ADDR:FILE", action="append",
                         help="write a file to flash memory", type=parse_write)
+    parser.add_argument("-f", "--read-fuses", metavar="FILE",
+                        help="read eFuses to a file")
 
     args = parser.parse_args()
 
@@ -201,6 +217,12 @@ if __name__ == "__main__":
     mtk.initialize()
     info = mtk.get_storage_info()
     print("Flash size: 0x%x" % info["size"])
+    print("MAC address: %s" % mtk.get_mac())
+
+    if args.read_fuses:
+        fuses = mtk.read_efuse(0, 0x200)
+        with open(args.read_fuses, "wb") as fd:
+            fd.write(fuses)
 
     if args.erase:
         print("Erasing flash memory...")
