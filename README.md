@@ -20,7 +20,7 @@ See the built-in help:
 
 Example:
 
-    python mt7687flash.py -p /dev/ttyACM1 -s hs -e \
+    python mt7687flash.py -p /dev/ttyACM1 -s hs \
         -w 0x0:mt7687_bootloader.bin \
         -w 0xb000:WIFI_RAM_CODE_MT76X7_in_flash.bin \
         -w 0x7c000:mt7687_iot_sdk_demo.bin
