@@ -182,6 +182,12 @@ class MtkFlasher(object):
         self.log("    returned:", reply.encode("hex"))
         return reply[4:]
 
+    def read_unique_id(self):
+        self.log("  cmd: read_unique_id")
+        reply = self.command(0x02, magic=self.SECRET_MAGIC)
+        self.log("    returned:", reply.encode("hex"))
+        return reply[4:]
+
     def get_mac(self):
         fuseblock = self.read_efuse(0, 0x10)
         return ":".join("%02x" % ord(c) for c in fuseblock[4:10])
@@ -218,6 +224,7 @@ if __name__ == "__main__":
     info = mtk.get_storage_info()
     print("Flash size: 0x%x" % info["size"])
     print("MAC address: %s" % mtk.get_mac())
+    print("Unique ID: %s" % mtk.read_unique_id().encode("hex"))
 
     if args.read_fuses:
         fuses = mtk.read_efuse(0, 0x200)
